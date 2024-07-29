@@ -2,9 +2,39 @@
 
 This repository holds the code to analyze dSHERLOCK reactions.
 
-## Usage
+## Code
 
-Please refer to the example jupyter notebook to understand the usage of this repository.
+Explanation of modules in Analysis:
+
+| Module  | Use | Input data format | Output data format |
+| ------------- | ------------- | ------------- | ------------- |
+| Image  | extracting fluorescence over time for each partition from image files  | .tif (two-channel image series) | .csv (timeseries of intensity for each partition) |
+| Timeseries  | extracting features from fluorescence over time | .csv (timeseries of intensity for each partition)  | .csv (features extracted after selected pseudo-end-timepoint) |
+| Auxiliary | helper functions | N.A. | N.A. |
+
+Modules in Figures contain helper functions for plotting.
+
+Pipeline explanation:
+First, the Image and Timeseries scripts need to be applied to newly recorded data. Subsequently, there are two options:
+- thresholding on one extracted feature (most commonly maximum intensity feat_fq_delta_max) for simple positive vs. negative. See jupyter notebook Thresholding_Example_data.ipynb for an example.
+- classification with pre-trained classifier for allele fraction quantification. See jupyter notebook Classification_Example_data.ipynb for an example.
+
+To see how the pre-trained classifier was trained, please refer to the jupyter notebook Classification.ipynb.
+
+## Data
+
+The included data was used to generate the following figures:
+
+| Name  | Figure | Subfigures | Comment |
+| ------------- | ------------- | ------------- | ------------- |
+| CAuris CalCurve  | 2  | a-e  |  |
+| Simulated Swab Samples  | 2 | f-g  |  |
+| Timecourse 15h  | 3 | c-d  |  |
+| FKS1 CalCurve  | 3 | e-f  | split into Mutant (MT) and Wildtype (WT) |
+| Training  | 3 | h-j  | partial reuse of data from "Timecourse 15h" and "FKS1 CalCurve" for training |
+| Admix  | 4 | a-l  |  |
+
+Example_data contains some example data folders selected from the above data for illustration purposes.
 
 ## Contributing
 
