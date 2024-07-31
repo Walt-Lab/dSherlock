@@ -13,6 +13,27 @@ import matplotlib.pyplot as plt
 
 DILUTION_FACTOR = 5 # dilution factor of sample in total reaction volume
 
+# set pandas options for better visualization of over-sized dataframes
+pd.set_option('display.max_rows', 500)
+pd.set_option('display.max_columns', 500)
+pd.set_option('display.width', 1000)
+
+# set imaging interval in minutes
+IMAGING_INTERVAL_MIN = 2
+
+# set maximum frame of the timeseries
+MAX_FRAME = 76
+
+# set frames that you want to try for feature extraction
+FINAL_FRAMES_TO_TRY = range(3, 77, 1)
+
+# set 0/1 for smoothening of curves (disadvantageous for long imaging intervals)
+SMOOTHEN = 1
+
+
+# specify path to folder that contains all files you want to analyze
+FOLDER_PATH = r""
+
 # used
 def set_smooth(df, column):
     df[column] = df.groupby('UID')[column].rolling(window=3, center=True, min_periods=1, win_type='Gaussian').mean().reset_index(0, drop=True)
@@ -304,7 +325,7 @@ def set_intensities(df, timepoints):
         df = df.merge(intensities, how='outer', on='UID')
         df.rename({"fq_delta_x": 'fq_delta', "fq_delta_y": 'feat_fq_delta_tp_{}'.format(time)}, axis=1, inplace=True)
 
-    print(df)
+    #print(df)
     return df
 
 
@@ -315,7 +336,7 @@ def process(path, path_rox):
     d = pd.read_csv(path)
     d['UID'] = d['label']  ############## replace with batch
     d.sort_values(by=['UID', 'frame'], inplace=True)
-    print(d)
+    #print(d)
     d = d.loc[:, ['UID', 'frame', 'mean', 'y', 'x']]
 
     # pull rox dataframe and add it to the fq dataframe
@@ -323,10 +344,10 @@ def process(path, path_rox):
     d_rox['UID'] = d_rox['label']
     d = set_rox(df=d, df_rox=d_rox)
 
-    print(d['frame'].max())
+    #print(d['frame'].max())
 
     d['time'] = (d['frame'] - 1)*IMAGING_INTERVAL_MIN
-    print(d)
+    #print(d)
 
 
     ######### SMOOTHENING ##########
@@ -347,14 +368,14 @@ def process(path, path_rox):
     # set the current velocity for each smoothened timeseries and their cumulative delta timeseries
     d = set_velocity(d, 'fq_delta')
 
-    print(d)
+    #print(d)
     d.to_csv(r"{}\{}".format(path[0:path.rfind('\\')], 'timeseries_processed.csv'))
 
 
     timeseries = d.columns
 
     timeseries = [s for s in timeseries if 'fq_delta' in s or 'UID' in s or 'frame' in s or 'time' in s]
-    print(timeseries)
+    #print(timeseries)
 
     d_stable = d
 
@@ -406,14 +427,14 @@ def process(path, path_rox):
             # final area / max area
             d = set_final_area(d, series)
 
-        print(d)
+        #print(d)
         # active velocity
         d = set_active_velocity(d, final_frame)
 
         # intensity at certain timepoints
         #d = set_intensities(d, range(1, 92))
 
-        print(d)
+        #print(d)
         d = d.loc[d['frame'] == final_frame].drop(['frame', 'fq', 'rox', 'fq_delta', 'fq_delta_velocity'], axis=1)
 
         d.to_csv(r"{}\{}_{}.csv".format(path[0:path.rfind('\\')], 'features', final_frame))
@@ -444,24 +465,6 @@ def batch(experiment_path):
 
 if __name__ == "__main__":
 
-    # set pandas options for better visualization of over-sized dataframes
-    pd.set_option('display.max_rows', 500)
-    pd.set_option('display.max_columns', 500)
-    pd.set_option('display.width', 1000)
 
-    # set imaging interval in minutes
-    IMAGING_INTERVAL_MIN = 2
-
-    # set maximum frame of the timeseries
-    MAX_FRAME = 76
-
-    # set frames that you want to try for feature extraction
-    FINAL_FRAMES_TO_TRY = range(3, 77, 1)
-
-    # set 0/1 for smoothening of curves (disadvantageous for long imaging intervals)
-    SMOOTHEN = 1
-
-    # specify path to folder that contains all files you want to analyze
-    FOLDER_PATH = r"C:/Users/anton/Code/dSherlock/Example_data/Thresholding"
 
     batch(FOLDER_PATH)

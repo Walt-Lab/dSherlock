@@ -46,8 +46,12 @@ def imageProcessing(path, result_folder):
     tiff = np.transpose(tiff, (1, 0, 2, 3))
 
     # load and apply field flatness correction factors to reporter channel
-    flatness_factors = np.loadtxt(r'C:\Users\Wyss User\OneDrive - Harvard University\Experiments\Digital\20230303_FieldFlatness\NORM_FACTORS.csv', delimiter=',', dtype=float)
-    tiff = [np.divide(tiff[0], flatness_factors),tiff[1]]
+    try:
+        flatness_factors = np.loadtxt(r'NORM_FACTORS.csv', delimiter=',', dtype=float) # replace NORM_FACTORS.csv with path to csv file containing normalization factors for each pixel for field flatness correction
+        tiff = [np.divide(tiff[0], flatness_factors),tiff[1]]
+    except FileNotFoundError:
+        print("no field flatness correction applied")
+        pass
 
     print('   ---THRESHOLDING---')
 
@@ -222,19 +226,19 @@ PRE: all tif files to be processed are in FOLDER_PATH
 POST: all tif files in FOLDER_PATH have run through the image processing pipine imageProcessing(), result folders have been created in FOLDER_PATH,
 result folders contain csv files with reporter fluorescence intensity over time for each tracked well and rox fluorescence intensity over time for each tracked well
 """
-def batch():
+def batch(folder_path=FOLDER_PATH):
 
-    for file in os.listdir(FOLDER_PATH):
+    for file in os.listdir(folder_path):
 
         if file.endswith(".tif"):
 
             # make result folder
             print("WORKING ON FILE: {}".format(file))
-            result_folder = r"{}\Results_{}".format(FOLDER_PATH, file[0:file.find('.')])
+            result_folder = r"{}\Results_{}".format(folder_path, file[0:file.find('.')])
             os.mkdir(result_folder)
 
             # call image processing pipeline and save the extracted mean intensities for each partition at each timepoint to csv files in the result folder
-            nOfWells, timeseries, timeseries_rox = imageProcessing(r"{}\{}".format(FOLDER_PATH, file), result_folder)
+            nOfWells, timeseries, timeseries_rox = imageProcessing(r"{}\{}".format(folder_path, file), result_folder)
             timeseries.to_csv(r"{}\{}".format(result_folder, 'timeseries.csv'))
             timeseries_rox.to_csv(r"{}\{}".format(result_folder, 'timeseries_rox.csv'))
 

@@ -14,12 +14,21 @@ Explanation of modules in Analysis:
 
 Modules in Figures contain helper functions for plotting.
 
+Explanation of Jupyter notebooks:
+
+| Notebook  | Use |
+| ------------- | ------------- |
+| Image_processing_Example_data.ipynb  | applying the Image and Timeseries pipelines to the example image file, giving timeseries and features as results  |
+| Thresholding_Example_data.ipynb  | determining fraction of positive compartments through thresholding (most commonly maximum intensity feat_fq_delta_max) for simple positive vs. negative |
+| Classification_Example_data.ipynb | applying a pre-trained classifier for allele fraction quantification |
+| Classification.ipynb | training a classifier and subsequently using the classifier for allele fraction quantification. NOTE: using this notebook needs the full training dataset and the full admix dataset which are both very large and its presence is intended more as a read-only reference to understand the training pipeline |
+
 Pipeline explanation:
-First, the Image and Timeseries scripts need to be applied to newly recorded data. Subsequently, there are two options:
+First, the Image and Timeseries scripts need to be applied to newly recorded data. See jupyter notebook Image_processing_Example_data.ipynb for an example.
+Subsequently, there are two options:
 - thresholding on one extracted feature (most commonly maximum intensity feat_fq_delta_max) for simple positive vs. negative. See jupyter notebook Thresholding_Example_data.ipynb for an example.
 - classification with pre-trained classifier for allele fraction quantification. See jupyter notebook Classification_Example_data.ipynb for an example.
 
-To see how the pre-trained classifier was trained, please refer to the jupyter notebook Classification.ipynb.
 
 ## Data
 

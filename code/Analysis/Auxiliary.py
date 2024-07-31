@@ -123,256 +123,6 @@ def multivariateGaussian(X, mu, sigma):
     return p
 
 
-def labelNeg_full(df, feat, neg_sub, neg_add, neg_max):
-    probs = pd.DataFrame({'UID': [], 'set': [], 'prob': []})
-    mus = []
-
-    for set in df['set'].unique():
-        y, x, _ = plt.hist(x=df.loc[(df['set'] == set) & (df[feat] < neg_max)][feat], bins=1000)
-
-        NEG_mean = x[np.where(y == y.max())][0]
-
-        plt.clf()
-
-        X = np.array(
-            df.loc[(df['set'] == set) & (df[feat] > NEG_mean - neg_sub) & (df[feat] < NEG_mean + neg_add)][[feat]])
-        mu, var = estimateGaussian(X)
-        mus.append(mu)
-        print('#####')
-        print(mu)
-        print(var)
-
-        print(set)
-
-        plt.plot(np.linspace(1, 10000, 1000),
-                 1000000 * stats.norm.pdf(np.linspace(1, 10000, 1000), mu[0], np.sqrt(var[0])))
-        plt.hist(x=df.loc[df['set'] == set][feat], bins=100)
-        plt.show()
-
-        X_full = np.array(df.loc[(df['set'] == set)][[feat]])
-
-        X_prob = multivariateGaussian(X_full, mu, np.sqrt(var))
-        print(X_prob)
-
-        probs = pd.concat([probs, pd.DataFrame({'UID': df.loc[df['set'] == set]['UID'], 'set': set, 'prob': X_prob})])
-
-    df = df.merge(probs, on=['UID', 'set'])
-    df.loc[df['prob'] > 0, 'cluster'] = 'NEG'
-
-    return df, mus
-
-
-def labelNeg(df, feat, neg_max):
-    probs = pd.DataFrame({'UID': [], 'set': [], 'prob': []})
-    mus = []
-
-    for set in df['set'].unique():
-        print(set)
-
-        # find mean of negative population
-        y, x, _ = plt.hist(x=df.loc[(df['set'] == set) & (df[feat] < neg_max)][feat], bins=1000)
-        NEG_mean = x[np.where(y == y.max())][0]
-        plt.clf()
-
-        # find left half of negative population and their density
-        X_left = np.array(df.loc[(df['set'] == set) & (df[feat] < NEG_mean)][[feat]])
-        X_right = 2 * NEG_mean - X_left
-        X = np.concatenate([X_left, X_right])
-
-        mu, var = estimateGaussian(X)
-        mus.append(mu)
-        print('#####')
-        print(mu)
-        print(var)
-
-        print(set)
-
-        plt.plot(np.linspace(1, 10000, 1000),
-                 1000000 * stats.norm.pdf(np.linspace(1, 10000, 1000), mu[0], np.sqrt(var[0])))
-        plt.hist(x=df.loc[df['set'] == set][feat], bins=100)
-        plt.show()
-
-        X_full = np.array(df.loc[(df['set'] == set)][[feat]])
-
-        X_prob = multivariateGaussian(X_full, mu, np.sqrt(var))
-        print(X_prob)
-
-        probs = pd.concat([probs, pd.DataFrame({'UID': df.loc[df['set'] == set]['UID'], 'set': set, 'prob': X_prob})])
-
-    df = df.merge(probs, on=['UID', 'set'])
-    df.loc[df['prob'] > 0, 'cluster'] = 'NEG'
-
-    return df, mus
-
-
-def func_truncnorm(p, r, xa, xb):
-    return stats.truncnorm.nnlf(p, r)
-
-
-def constraint(p, r, xa, xb):
-    a, b, loc, scale = p
-    return np.array([a * scale + loc - xa, b * scale + loc - xb])
-
-
-def labelNeg_trunc(df, feat, neg_max, neg_prob_cutoff):
-    probs = pd.DataFrame({'UID': [], 'set': [], 'prob': []})
-    mus = []
-
-    for set in df['set'].unique():
-        print(set)
-
-        # find mean of negative population
-        y, x, _ = plt.hist(x=df.loc[(df['set'] == set) & (df[feat] < neg_max)][feat], bins=1000)
-        NEG_mean = x[np.where(y == y.max())][0]
-        print(NEG_mean)
-        plt.clf()
-
-        # find left half of negative population and their density
-        X = np.array(df.loc[(df['set'] == set) & (df[feat] < NEG_mean + (NEG_mean / 2)) & (df[feat] > 0)][[feat]])
-        y, x, _ = plt.hist(x=X, density=True, bins=100, align='mid')
-        plt.clf()
-
-        scale_guess = 200
-        loc_guess = NEG_mean
-        a_guess = (0 - loc_guess) / scale_guess
-        b_guess = (NEG_mean + (NEG_mean / 2) - loc_guess) / scale_guess
-        p0 = [a_guess, b_guess, loc_guess, scale_guess]
-
-        par = fmin_slsqp(func_truncnorm, p0, f_eqcons=constraint, args=(X, 0, NEG_mean + 1000),
-                         iprint=False, iter=1000)
-        print(par)
-        print(scale_guess)
-        print(NEG_mean)
-        print(min(X))
-        if np.isnan(par).any():
-            raise Exception("fitting not possible")
-        mus.append([par[2]])
-
-        X_full = np.array(df.loc[(df['set'] == set)][[feat]])
-        X_prob = stats.norm.pdf(X_full, *par[2:])
-        X_prob = [prob[0] for prob in X_prob]
-
-        plt.hist(X_full, bins=100)
-        plt.plot(np.linspace(min(X_full), max(X_full), 10000),
-                 1000000 * stats.norm.pdf(np.linspace(min(X_full), max(X_full), 10000), *par[2:]), 'k--', lw=1,
-                 alpha=1.0, color='r')
-        plt.show()
-
-        probs = pd.concat([probs, pd.DataFrame({'UID': df.loc[df['set'] == set]['UID'], 'set': set, 'prob': X_prob})])
-
-    df = df.merge(probs, on=['UID', 'set'])
-    df.loc[df['prob'] > neg_prob_cutoff, 'cluster'] = 'NEG'
-
-    return df, mus
-
-
-def labelNeg_trunc2(df, feat, neg_max, neg_prob_cutoff):
-    probs = pd.DataFrame({'UID': [], 'set': [], 'prob': []})
-    mus = []
-
-    for set in df['set'].unique():
-        print(set)
-
-        # find mean of negative population
-        y, x, _ = plt.hist(x=df.loc[(df['set'] == set) & (df[feat] < neg_max)][feat], bins=1000)
-        NEG_mean = x[np.where(y == y.max())][0]
-        print(NEG_mean)
-        plt.clf()
-
-        # find left half of negative population and their density
-        x = x[1:]
-        b_guess = x[(x >= NEG_mean) & (y < 0.2 * y.max())][0]
-        X = np.array(df.loc[(df['set'] == set) & (df[feat] < b_guess) & (df[feat] > 0)][[feat]])
-        y, x, _ = plt.hist(x=X, density=True, bins=100, align='mid')
-        plt.clf()
-
-        scale_guess = ((b_guess - NEG_mean) + (NEG_mean)) / 4
-        loc_guess = NEG_mean
-        # a_guess = (0 - loc_guess) / scale_guess
-        a_guess = 0
-        # b_guess = (NEG_mean + 1000 - loc_guess) / scale_guess
-        p0 = [a_guess, b_guess, loc_guess, scale_guess]
-        print(p0)
-
-        par = fmin_slsqp(func_truncnorm, p0, f_eqcons=constraint, args=(X, 0, b_guess),
-                         iprint=False, iter=1000)
-        print(par)
-        print(scale_guess)
-        print(NEG_mean)
-        print(min(X))
-        if np.isnan(par).any():
-            raise Exception("fitting not possible")
-        mus.append([par[2]])
-
-        X_full = np.array(df.loc[(df['set'] == set)][[feat]])
-        X_prob = stats.norm.pdf(X_full, *par[2:])
-        X_prob = [prob[0] for prob in X_prob]
-
-        plt.hist(X_full, bins=100)
-        plt.plot(np.linspace(min(X_full), max(X_full), 10000),
-                 1000000 * stats.norm.pdf(np.linspace(min(X_full), max(X_full), 10000), *par[2:]), 'k--', lw=1,
-                 alpha=1.0, color='r')
-        plt.show()
-
-        probs = pd.concat([probs, pd.DataFrame({'UID': df.loc[df['set'] == set]['UID'], 'set': set, 'prob': X_prob})])
-
-    df = df.merge(probs, on=['UID', 'set'])
-    df.loc[df['prob'] > neg_prob_cutoff, 'cluster'] = 'NEG'
-
-    return df, mus
-
-
-def labelNeg_trunc3(df, feat, neg_max, neg_prob_cutoff):
-    probs = pd.DataFrame({'UID': [], 'set': [], 'prob': []})
-    mus = []
-
-    for set in df['set'].unique():
-        print(set)
-
-        # find mean of negative population
-        y, x, _ = plt.hist(x=df.loc[(df['set'] == set) & (df[feat] < neg_max)][feat], bins=100)
-        NEG_mean = x[np.where(y == y.max())][0]
-        print(NEG_mean)
-        plt.show()
-        plt.clf()
-
-        # find left half of negative population and their density
-        x = x[1:]
-        b_guess = x[(x >= NEG_mean) & (y < 0.2 * y.max())][1]
-        print("b_guess: {}".format(b_guess))
-        X = np.array(df.loc[(df['set'] == set) & (df[feat] < b_guess) & (df[feat] > 0)][[feat]])
-        y, x, _ = plt.hist(x=X, density=True, bins=100, align='mid')
-        plt.clf()
-
-        scale_guess = ((b_guess - NEG_mean) + (NEG_mean)) / 4
-        loc_guess = NEG_mean
-
-        par = stats.truncnorm.fit(X, scale=scale_guess, loc=loc_guess)
-        print(par)
-        print(scale_guess)
-        print(NEG_mean)
-        if np.isnan(par).any():
-            raise Exception("fitting not possible")
-        mus.append([par[2]])
-
-        X_full = np.array(df.loc[(df['set'] == set)][[feat]])
-        X_prob = stats.norm.pdf(X_full, *par[2:])
-        X_prob = [prob[0] for prob in X_prob]
-
-        plt.hist(X_full, bins=100)
-        plt.plot(np.linspace(min(X_full), max(X_full), 10000),
-                 1000000 * stats.norm.pdf(np.linspace(min(X_full), max(X_full), 10000), *par[2:]), 'k--', lw=1,
-                 alpha=1.0, color='r')
-        plt.show()
-
-        probs = pd.concat([probs, pd.DataFrame({'UID': df.loc[df['set'] == set]['UID'], 'set': set, 'prob': X_prob})])
-
-    df = df.merge(probs, on=['UID', 'set'])
-    df.loc[df['prob'] > neg_prob_cutoff, 'cluster'] = 'NEG'
-
-    return df, mus
-
-
 def labelNeg_thresh(df, feat, neg_sub, neg_add, neg_max):
     probs = pd.DataFrame({'UID': [], 'set': [], 'prob': []})
     mus = []
@@ -456,15 +206,7 @@ def normalize(df, feat):
                      stats.norm.pdf(np.linspace(bins[0], bins[len(bins) - 1], 10000), mu[0], np.sqrt(var[0])))) * max(
                      n) * stats.norm.pdf(np.linspace(bins[0], bins[len(bins) - 1], 10000), mu[0], np.sqrt(var[0])),
                  color='orange')
-        """
-        if '50fM' in set:
-            plt.xlim(-30000, 2000000)
-            plt.ylim(0, 3000)
-            plt.ylabel('Count')
-            plt.yticks([0, 2000])
-            plt.xticks([0, 1e6])
-            plt.xlabel('AUC')
-            fig.set_size_inches(3 / 2.54, 2 / 2.54)"""
+
         # plt.savefig(r'C:\Users\Wyss User\OneDrive - Harvard University\CAuris\Figures\3_Kinetics\Normalization_Pre_{}_{}.svg'.format(set, feat), format='svg', dpi=450, transparent=True)
         plt.clf()
 
@@ -476,72 +218,13 @@ def normalize(df, feat):
 
     df = df.merge(corrected, on=['UID', 'set'])
 
-    """
-    for set in [x for x in df['set'].unique() if '50fM' in x]:
-
-        X = np.array(df.loc[(df['set'] == set) & (df['cluster'] == 'NEG')][['{}_corr'.format(feat)]])
-        mu, var = estimateGaussian(X)
-        mus.append(mu[0])
-        vars.append(var[0])
-
-        fig, ax = plt.subplots()
-        n, bins, patches = plt.hist(x=df.loc[df['set'] == set]['{}_corr'.format(feat)], bins=100, color='blue')
-        legend_elements.append(Patch(facecolor=patches[0].get_facecolor(), label=set))
-        plt.plot(np.linspace(bins[0], bins[len(bins)-1], 10000),
-                 (1/max(stats.norm.pdf(np.linspace(bins[0], bins[len(bins)-1], 10000), mu[0], np.sqrt(var[0]))))*max(n) * stats.norm.pdf(np.linspace(bins[0], bins[len(bins)-1], 10000), mu[0], np.sqrt(var[0])),
-                 color='orange')
-        plt.xlim(-10, 80)
-        plt.ylim(0, 3000)
-        plt.yticks([0, 2000])
-        plt.xticks([0, 50])
-        plt.ylabel("Count")
-        plt.xlabel("AUC")
-        fig.set_size_inches(3 / 2.54, 2 / 2.54)"""
     # plt.savefig(r'C:\Users\Wyss User\OneDrive - Harvard University\CAuris\Figures\3_Kinetics\Normalization_Post_{}_{}.svg'.format(set, feat), format='svg', dpi=450, transparent=True)
     # plt.clf()
 
     return df
 
 
-def processKinetics2(df, pca, forest, features_norm, features_orig, neg_prob_cutoff):
-    # remove outliers
-    df = clean(df, z_roxInitial_exclude=1.5, z_fqInitial_exclude=2.5, frac_edge_exclude=0.05, dropna=True)
-
-    # label negative cluster by gaussian fitting
-    try:
-        df, _ = labelNeg_trunc(df, 'feat_fq_delta_max', 10000, neg_prob_cutoff)
-    except:
-        print("truncated failed")
-        df, _ = labelNeg_full(df, 'feat_fq_delta_max', 2500, 2500, 10000)
-
-    df.drop('prob', axis=1, inplace=True)
-
-    # normalize continuous features via negative cluster
-    for feat in features_norm:
-        try:
-            df = normalize(df, feat)
-        except:
-            print('problem in feature: {}'.format(feat))
-            pass
-
-    features = features_norm + features_orig
-
-    # decompose into PCs and predict clusters
-    X_ANA = pca.transform(
-        np.array(df[['{}_corr'.format(feat) if feat in features_norm else feat for feat in features]]))
-    # X_ANA = [x[8:] for x in X_ANA]  #####################
-    df['cluster'] = forest.predict(X_ANA)
-
-    try:
-        df, _ = labelNeg_trunc(df, 'feat_fq_delta_max', 10000, neg_prob_cutoff)
-    except:
-        print("truncated failed")
-        df, _ = labelNeg_full(df, 'feat_fq_delta_max', 2500, 2500, 10000)
-
-    return df, X_ANA
-
-
-def processKinetics(df, forest, scaler, pca, features_norm, features_orig, neg_prob_cutoff):
+def processKinetics(df, forest, scaler, pca, features_norm, features_orig, neg_prob_cutoff=None):
     # remove outliers
     df = clean(df, z_roxInitial_exclude=1.5, z_fqInitial_exclude=2.5, frac_edge_exclude=0.05, dropna=True)
 
@@ -556,70 +239,13 @@ def processKinetics(df, forest, scaler, pca, features_norm, features_orig, neg_p
     X_CONT = np.array(df.loc[df['cluster'] != 'NEG'][[feat for feat in features_norm]])
     X_DISC = np.array(df.loc[df['cluster'] != 'NEG'][[feat for feat in features_orig]])
 
+    # apply scaling and pca to continuous features
     X_CONT_SCALED = scaler.transform(X_CONT)
     X_PC = pca.transform(X_CONT_SCALED)
 
+    # make predictions
     df.loc[df['cluster'] != 'NEG', 'cluster'] = forest.predict(np.concatenate([X_CONT, X_PC, X_DISC], axis=1))
 
     return df, X_PC
 
 
-def getClassifier(path_train, label_frame, classify_frame, mt_sets, wt_sets, neg_prob_cutoff, features_norm,
-                  features_orig, n_class_members):
-    # LOAD LABELLING DATASET AND TRAINING DATASET
-    df_label = batch_load_and_combine(path_train, 'features_{}.csv'.format(label_frame))
-    df_train = batch_load_and_combine(path_train, 'features_{}.csv'.format(classify_frame))
-
-    # CLEAN DATASETS
-    df_label = clean(df_label)
-    df_train = clean(df_train)
-
-    # LABEL CLUSTERS IN THE LABEL DATASET AND COPY LABELS INTO TRAINING DATASET
-    try:
-        df_label, mus = labelNeg_trunc(df_label, 'feat_fq_delta_max', 10000, neg_prob_cutoff)
-    except:
-        df_label, _ = labelNeg_full(df_label, 'feat_fq_delta_max', 2500, 2500, 10000)
-
-    for ii, set in enumerate(df_label['set'].unique()):
-        if set in mt_sets:
-            df_label.loc[(df_label['set'] == set) & (df_label['prob'] <= neg_prob_cutoff), 'cluster'] = 'MT'
-        elif set in wt_sets:
-            df_label.loc[(df_label['set'] == set) & (df_label['prob'] <= neg_prob_cutoff), 'cluster'] = 'WT'
-        df_label.loc[(df_label['set'] == set) & (df_label['feat_fq_delta_max'] < mus[ii][0]), 'cluster'] = 'NEG'
-    df_train = df_train.merge(df_label[['UID', 'set', 'cluster']], on=['UID', 'set'])
-
-    # NORMALIZE CONTINUOUS FEATURES FOR TRAINING DATASET
-    for feat in features_norm:
-        try:
-            df_train = normalize(df_train, feat)
-        except:
-            print('problem in feature: {}'.format(feat))
-            pass
-    features = features_norm + features_orig
-
-    # REMOVE OUTLIERS FOR EACH NORMALIZED FEATURES IN THE TRAINING DATASET
-    for feat in features_norm:
-        df_train['{}_corr_z'.format(feat)] = df_train.groupby('set')['{}_corr'.format(feat)].apply(stats.zscore)
-        df_train = df_train.drop(df_train[df_train['{}_corr_z'.format(feat)] > 2.5].index, axis=0)
-
-    # print(df_train)
-    print(len(df_train.loc[df_train['cluster'] == 'NEG']))
-    print(len(df_train.loc[df_train['cluster'] == 'MT']))
-    print(len(df_train.loc[df_train['cluster'] == 'WT']))
-    # print(df_train['set'].unique())
-
-    # GET EQUAL NUMBERS FROM EACH CLUSTER AS TRAINING DATA
-    uid_train, uid_test = testTrainSplit(df_train, n_class_members)
-    X_TRAIN = np.array(df_train.query('UID in @uid_train')[
-                           ['{}_corr'.format(feat) if feat in features_norm else feat for feat in features]])
-    Y_TRAIN = np.array(df_train.query('UID in @uid_train')['cluster'])
-
-    # DECOMPOSE INTO PCs TO PREVENT OVERFITTING VIA CORRELATED FEATURES
-    pca = PCA(n_components=5)
-    X_TRAIN = pca.fit_transform(X_TRAIN)
-
-    # BUILD CLASSIFIER BASED ON CURATED TRAINING DATASET
-    forest = RandomForestClassifier(n_estimators=500, random_state=42)
-    forest = forest.fit(X_TRAIN, Y_TRAIN)
-
-    return pca, forest
